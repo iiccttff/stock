@@ -86,7 +86,8 @@ def process(table, data_all, date, backtest_column):
 
     column_tail = tuple(table['columns'])[-1]
     now_date = datetime.datetime.now().date()
-    sql = f"SELECT * FROM `{table_name}` WHERE `date` < '{now_date}' AND `{column_tail}` is NULL"
+    # 修改条件：查找日期 <= 当前日期 且 回测字段为NULL的记录
+    sql = f"SELECT * FROM `{table_name}` WHERE `date` <= '{now_date}' AND `{column_tail}` is NULL"
 
     try:
         data = pd.read_sql(sql=sql, con=mdb.engine())
