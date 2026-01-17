@@ -30,6 +30,11 @@ stock_hist_cache_path = os.path.join(cpath_current, 'cache', 'hist')
 if not os.path.exists(stock_hist_cache_path):
     os.makedirs(stock_hist_cache_path)  # 创建多个文件夹结构。
 
+# 股票列表缓存目录
+stock_spot_cache_path = os.path.join(cpath_current, 'cache', 'spot')
+if not os.path.exists(stock_spot_cache_path):
+    os.makedirs(stock_spot_cache_path)
+
 
 # 600 601 603 605开头的股票是上证A股
 # 600开头的股票是上证A股，属于大盘股，其中6006开头的股票是最早上市的股票，
@@ -93,6 +98,27 @@ def fetch_etfs(date):
 # 读取当天股票数据
 def fetch_stocks(date, max_pages=None):
     try:
+        # 缓存文件路径
+        if date is None:
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        else:
+            date_str = date.strftime("%Y-%m-%d")
+        cache_file = os.path.join(stock_spot_cache_path, f"{date_str}.pickle")
+
+        # 检查缓存是否存在且在今天（同一交易日的缓存有效）
+        now = datetime.datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+
+        if os.path.isfile(cache_file):
+            # 缓存文件名中的日期
+            cache_date_str = os.path.basename(cache_file).split('.')[0]
+            # 如果缓存日期与目标日期相同，且是今天，使用缓存
+            if cache_date_str == date_str:
+                logging.info(f"从缓存读取 {date_str} 的股票列表")
+                return pd.read_pickle(cache_file)
+
+        # 没有缓存，从网络获取
+        logging.info(f"从网络获取 {date_str} 的股票列表")
         data = she.stock_zh_a_spot_em(max_pages=max_pages)
         if data is None or len(data.index) == 0:
             return None
@@ -102,6 +128,14 @@ def fetch_stocks(date, max_pages=None):
             data.insert(0, 'date', date.strftime("%Y-%m-%d"))
         data.columns = list(tbs.TABLE_CN_STOCK_SPOT['columns'])
         data = data.loc[data['code'].apply(is_a_stock)].loc[data['new_price'].apply(is_open)]
+
+        # 写入缓存
+        try:
+            data.to_pickle(cache_file)
+            logging.info(f"股票列表已缓存到 {cache_file}")
+        except Exception as e:
+            logging.warning(f"缓存写入失败：{e}")
+
         return data
     except Exception as e:
         logging.error(f"stockfetch.fetch_stocks处理异常：{e}")
