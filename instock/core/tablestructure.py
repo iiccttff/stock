@@ -1045,19 +1045,52 @@ def get_field_cn(key, table):
 def get_field_cns(cols):
     data = []
     for k in cols:
+        cn = cols[k]['cn']
+        width = cols[k]['size']
+
+        # 根据字段名判断数据类型，设置格式化样式
         if k == 'code':
-            data.append({"value": k, "caption": cols[k]['cn'], "width": cols[k]['size'],
+            data.append({"value": k, "caption": cn, "width": width,
                          "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"}, "style": ""})
-        elif k == 'change_rate':
-            data.append({"value": k, "caption": cols[k]['cn'], "width": cols[k]['size'],
-                         "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"}, "conditionalFormats": [
-                    {"ruleType": "formulaRule", "formula": "@>0", "style": {"foreColor": "red"}},
-                    {"ruleType": "formulaRule", "formula": "@<0", "style": {"foreColor": "green"}}]})
+        elif k == 'change_rate' or k == 'p_change':
+            # 涨跌幅字段：百分比格式，红色正数，绿色负数
+            data.append({"value": k, "caption": cn, "width": width,
+                         "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"},
+                         "formatter": "=NUMBER(@/100, '0.00%')",
+                         "conditionalFormats": [
+                             {"ruleType": "formulaRule", "formula": "@>0", "style": {"foreColor": "#e74c3c"}},
+                             {"ruleType": "formulaRule", "formula": "@<0", "style": {"foreColor": "#27ae60"}}]})
+        elif k.startswith('rate_'):
+            # 收益率字段：百分比格式
+            data.append({"value": k, "caption": cn, "width": width,
+                         "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"},
+                         "formatter": "=NUMBER(@/100, '0.00%')",
+                         "conditionalFormats": [
+                             {"ruleType": "formulaRule", "formula": "@>0", "style": {"foreColor": "#e74c3c"}},
+                             {"ruleType": "formulaRule", "formula": "@<0", "style": {"foreColor": "#27ae60"}}]})
+        elif 'amount' in k or 'fund' in k or 'market_cap' in k or 'turnover' in k or k in ['amount']:
+            # 金额字段：千分位格式，保留2位小数
+            data.append({"value": k, "caption": cn, "width": width,
+                         "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"},
+                         "formatter": "=TEXT(@, '#,##0.00')"})
+        elif k in ['volume', 'bid_trust_amount', 'ask_trust_amount', 'main_force_in', 'main_force_out']:
+            # 成交量字段：千分位格式
+            data.append({"value": k, "caption": cn, "width": width,
+                         "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"},
+                         "formatter": "=TEXT(@, '#,##0')"})
+        elif k in ['new_price', 'high', 'low', 'close', 'open', 'pre_close', 'pe', 'pb', 'ps', 'pcf']:
+            # 价格和比率字段：保留2位小数
+            data.append({"value": k, "caption": cn, "width": width,
+                         "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"},
+                         "formatter": "=TEXT(@, '0.00')"})
+        elif 'ratio' in k:
+            # 比率字段：百分比格式
+            data.append({"value": k, "caption": cn, "width": width,
+                         "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"},
+                         "formatter": "=NUMBER(@/100, '0.00%')"})
         else:
-            data.append({"value": k, "caption": cols[k]['cn'], "width": cols[k]['size'],
+            data.append({"value": k, "caption": cn, "width": width,
                          "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"}})
-        # data.append({"value": k, "caption": cols[k]['cn'], "width": cols[k]['size'], "headerStyle": {"font": "bold 9pt Calibri", "wordWrap": "true"}})
-        # data.append({"name": k, "displayName": cols[k]['cn'], "size": cols[k]['size']})
     return data
 
 
