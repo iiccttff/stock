@@ -32,9 +32,12 @@ __date__ = '2023/3/10 '
 def prepare(date):
     try:
         logging.info(f"开始处理日期 {date} 的K线模式数据")
+        logging.info("正在获取股票历史数据，这可能需要几秒钟...")
         stocks_data = stock_hist_data(date=date).get_data()
-        if stocks_data is None:
-            logging.warning(f"日期 {date} 没有获取到股票数据")
+        if stocks_data is None or len(stocks_data) == 0:
+            logging.warning(f"日期 {date} 没有获取到股票数据或数据为空")
+            logging.warning("可能的原因：网络连接超时、API 访问受限或数据库中没有该日期的股票数据")
+            logging.warning("建议：检查网络连接、配置代理或更新 Cookie")
             return
 
         logging.info(f"获取到 {len(stocks_data)} 只股票的历史数据")
@@ -62,13 +65,15 @@ def prepare(date):
         data = pd.merge(dataKey, dataVal, on=['code'], how='left')
         # 单例，时间段循环必须改时间
         date_str = date.strftime("%Y-%m-%d")
-        if date.strftime("%Y-%m-%d") != data.iloc[0]['date']:
+        if len(data) > 0 and date.strftime("%Y-%m-%d") != data.iloc[0]['date']:
             data['date'] = date_str
         mdb.insert_db_from_df(data, table_name, cols_type, False, "`date`,`code`")
         logging.info(f"日期 {date} 的K线模式数据处理完成，共插入 {len(data)} 条记录")
 
     except Exception as e:
         logging.error(f"klinepattern_data_daily_job.prepare处理异常：{e}")
+        import traceback
+        logging.error(f"详细错误信息：{traceback.format_exc()}")
 
 
 def run_check(stocks, date=None, workers=40):

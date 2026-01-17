@@ -6,6 +6,7 @@ Desc: 东方财富网-行情首页-沪深京 A 股
 """
 import random
 import time
+import logging
 
 import pandas as pd
 import math
@@ -41,7 +42,8 @@ def stock_zh_a_spot_em() -> pd.DataFrame:
         "fields": "f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f14,f15,f16,f17,f18,f20,f21,f22,f23,f24,f25,f26,f37,f38,f39,f40,f41,f45,f46,f48,f49,f57,f61,f100,f112,f113,f114,f115,f221",
         "_": "1623833739532",
     }
-    r =  fetcher.make_request(url, params=params)
+    # 增加超时时间到 30 秒，重试次数 3 次
+    r = fetcher.make_request(url, params=params, retry=3, timeout=30)
     data_json = r.json()
     data = data_json["data"]["diff"]
     if not data:
@@ -49,15 +51,17 @@ def stock_zh_a_spot_em() -> pd.DataFrame:
 
     data_count = data_json["data"]["total"]
     page_count = math.ceil(data_count/page_size)
+    logging.info(f"获取股票列表：总数 {data_count}，共 {page_count} 页，每页 {page_size} 只")
     while page_count > 1:
         # 添加随机延迟，避免爬取过快
         time.sleep(random.uniform(1, 1.5))
         page_current = page_current + 1
         params["pn"] = page_current
-        r =  fetcher.make_request(url, params=params)
+        r = fetcher.make_request(url, params=params, retry=3, timeout=30)
         data_json = r.json()
         _data = data_json["data"]["diff"]
         data.extend(_data)
+        logging.info(f"已获取第 {page_current}/{page_count} 页股票数据")
         page_count =page_count - 1
 
     temp_df = pd.DataFrame(data)
@@ -348,7 +352,7 @@ def stock_zh_a_hist(
         "end": end_date,
         "_": "1623766962675",
     }
-    r =  fetcher.make_request(url, params=params)
+    r = fetcher.make_request(url, params=params, retry=3, timeout=30)
     data_json = r.json()
     if not (data_json["data"] and data_json["data"]["klines"]):
         return pd.DataFrame()

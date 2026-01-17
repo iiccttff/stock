@@ -62,13 +62,13 @@ class eastmoney_fetcher:
         session.cookies.update({'Cookie': self._get_cookie()})
         return session
 
-    def make_request(self, url, params=None, retry=1, timeout=10):
+    def make_request(self, url, params=None, retry=3, timeout=30):
         """
         发送请求
         :param url: 请求URL
         :param params: 请求参数
-        :param retry: 重试次数
-        :param timeout: 超时时间
+        :param retry: 重试次数（默认3次）
+        :param timeout: 超时时间（默认30秒）
         :return: 响应对象
         """
         for i in range(retry):

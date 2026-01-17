@@ -32,7 +32,7 @@ function CYQCalculator(kdata, accuracyFactor, range, cyq_days) {
 CYQCalculator.prototype.calc = function (index) {
     let i;
     let maxprice = 0;
-    let minprice = 1000000;
+    let minprice = 0;
     /**
      * 计算N天的交易成本
      */
@@ -51,18 +51,17 @@ CYQCalculator.prototype.calc = function (index) {
     const kdata_len = kdata.length;
     for (i = 0; i < kdata_len; i++) {
         const elements = kdata[i];
-        maxprice = Math.max(maxprice, elements.high);
-        minprice = Math.min(minprice, elements.low);
+        maxprice = !maxprice ? elements.high : Math.max(maxprice, elements.high);
+        minprice = !minprice ? elements.low : Math.min(minprice, elements.low);
     }
     // 精度不小于0.01 产品逻辑
     const accuracy = Math.max(0.01, (maxprice - minprice) / (factor - 1));
-
-    const currentprice = kdata[kdata_len-1].close;
-    let boundary = -1;
     /**
      * 值域
      * @type {Array.<number>}
      */
+    const currentprice = kdata[kdata_len-1].close;
+    let boundary = -1;
     const yrange = [];
     for (i = 0; i < factor; i++) {
         const _price= (minprice + accuracy * i).toFixed(2) / 1;
@@ -177,7 +176,7 @@ CYQCalculator.prototype.calc = function (index) {
          */
         this.percentChips = arguments[4];
         /**
-         * 筹码堆叠亏盈分界下标
+         * 最新价
          * @type {number}
          */
         this.b = arguments[5];
