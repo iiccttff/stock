@@ -1,12 +1,18 @@
 #!/usr/local/bin/python3
 # -*- coding: utf-8 -*-
 
-
 import logging
 import concurrent.futures
 import pandas as pd
 import os.path
 import sys
+
+# 配置日志输出到控制台
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
 
 cpath_current = os.path.dirname(os.path.dirname(__file__))
 cpath = os.path.abspath(os.path.join(cpath_current, os.pardir))

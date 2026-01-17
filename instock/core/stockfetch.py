@@ -41,8 +41,8 @@ if not os.path.exists(stock_hist_cache_path):
 # 300、301开头的股票是创业板股票；400开头的股票是三板市场股票。
 # 430、83、87开头的股票是北证A股
 def is_a_stock(code):
-    # 上证A股  # 深证A股
-    return code.startswith(('600', '601', '603', '605', '000', '001', '002', '003', '300', '301'))
+    # 上证A股  # 深证A股  # 科创板
+    return code.startswith(('600', '601', '603', '605', '688', '000', '001', '002', '003', '300', '301'))
 
 
 # 过滤掉 st 股票。
@@ -91,9 +91,9 @@ def fetch_etfs(date):
 
 
 # 读取当天股票数据
-def fetch_stocks(date):
+def fetch_stocks(date, max_pages=None):
     try:
-        data = she.stock_zh_a_spot_em()
+        data = she.stock_zh_a_spot_em(max_pages=max_pages)
         if data is None or len(data.index) == 0:
             return None
         if date is None:
@@ -377,8 +377,10 @@ def stock_hist_cache(code, date_start, date_end=None, is_cache=True, adjust=''):
     # 如果缓存存在就直接返回缓存数据。压缩方式。
     try:
         if os.path.isfile(cache_file):
+            logging.debug(f"从缓存读取股票 {code} 的历史数据")
             return pd.read_pickle(cache_file, compression="gzip")
         else:
+            logging.debug(f"从网络获取股票 {code} 的历史数据")
             if date_end is not None:
                 stock = she.stock_zh_a_hist(symbol=code, period="daily", start_date=date_start, end_date=date_end,
                                             adjust=adjust)

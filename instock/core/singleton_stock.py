@@ -3,6 +3,8 @@
 
 import logging
 import concurrent.futures
+import sys
+from tqdm import tqdm
 import instock.core.stockfetch as stf
 import instock.core.tablestructure as tbs
 import instock.lib.trade_time as trd
@@ -53,19 +55,28 @@ class stock_hist_data(metaclass=singleton_type):
         date_start, is_cache = trd.get_trade_hist_interval(stocks[0][0])  # 提高运行效率，只运行一次
         logging.info(f"开始获取 {len(stocks)} 只股票的历史数据，起始日期: {date_start}, 使用缓存: {is_cache}")
         _data = {}
+        completed_count = 0
         try:
             # max_workers是None还是没有给出，将默认为机器cup个数*5
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 future_to_stock = {executor.submit(stf.fetch_stock_hist, stock, date_start, is_cache): stock for stock
                                    in stocks}
-                for future in concurrent.futures.as_completed(future_to_stock):
-                    stock = future_to_stock
-                    try:
-                        __data = future.result()
-                        if __data is not None:
-                            _data[stock] = __data
-                    except Exception as e:
-                        logging.error(f"singleton.stock_hist_data处理异常：{stock[1] if len(stock) > 1 else '未知'}代码{e}")
+                logging.info(f"已提交 {len(future_to_stock)} 个任务到线程池")
+                with tqdm(total=len(stocks), desc=f"获取股票历史数据 ({date_start})", unit="只",
+                          file=sys.stderr, mininterval=0.1, miniters=1) as pbar:
+                    for future in concurrent.futures.as_completed(future_to_stock):
+                        stock = future_to_stock[future]
+                        try:
+                            __data = future.result()
+                            if __data is not None:
+                                _data[stock] = __data
+                                completed_count += 1
+                                if completed_count % 10 == 0:
+                                    logging.info(f"已完成 {completed_count}/{len(stocks)} 只股票")
+                        except Exception as e:
+                            logging.error(f"singleton.stock_hist_data处理异常：{stock[1] if len(stock) > 1 else '未知'}代码{e}")
+                        finally:
+                            pbar.update(1)
         except Exception as e:
             logging.error(f"singleton.stock_hist_data处理异常：{e}")
         logging.info(f"成功获取 {len(_data)} 只股票的历史数据")

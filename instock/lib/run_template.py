@@ -24,11 +24,16 @@ def run_with_args(run_fun, *args):
         run_date = start_date
         try:
             with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = []
                 while run_date <= end_date:
                     if trd.is_trade_date(run_date):
-                        executor.submit(run_fun, run_date, *args)
+                        future = executor.submit(run_fun, run_date, *args)
+                        futures.append(future)
                         time.sleep(2)
                     run_date += datetime.timedelta(days=1)
+                # 等待所有任务完成
+                for future in concurrent.futures.as_completed(futures):
+                    future.result()
         except Exception as e:
             logging.error(f"run_template.run_with_args处理异常：{run_fun}{sys.argv}{e}")
     elif len(sys.argv) == 2:
@@ -36,12 +41,17 @@ def run_with_args(run_fun, *args):
         dates = sys.argv[1].split(',')
         try:
             with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = []
                 for date in dates:
                     tmp_year, tmp_month, tmp_day = date.split("-")
                     run_date = datetime.datetime(int(tmp_year), int(tmp_month), int(tmp_day)).date()
                     if trd.is_trade_date(run_date):
-                        executor.submit(run_fun, run_date, *args)
+                        future = executor.submit(run_fun, run_date, *args)
+                        futures.append(future)
                         time.sleep(2)
+                # 等待所有任务完成
+                for future in concurrent.futures.as_completed(futures):
+                    future.result()
         except Exception as e:
             logging.error(f"run_template.run_with_args处理异常：{run_fun}{sys.argv}{e}")
     else:

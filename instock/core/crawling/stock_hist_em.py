@@ -19,10 +19,11 @@ __date__ = '2025/12/31 '
 # 创建全局实例，供所有函数使用
 fetcher = eastmoney_fetcher()
 
-def stock_zh_a_spot_em() -> pd.DataFrame:
+def stock_zh_a_spot_em(max_pages=None) -> pd.DataFrame:
     """
     东方财富网-沪深京 A 股-实时行情
     https://quote.eastmoney.com/center/gridlist.html#hs_a_board
+    :param max_pages: 最大获取页数，None 表示获取所有页
     :return: 实时行情
     :rtype: pandas.DataFrame
     """
@@ -38,31 +39,63 @@ def stock_zh_a_spot_em() -> pd.DataFrame:
         "fltt": "2",
         "invt": "2",
         "fid": "f12",
-        "fs": "m:0 t:6,m:0 t:80,m:1 t:2,m:1 t:23,m:0 t:81 s:2048",
+        "fs": "m:0 t:6,m:0 t:80,m:1 t:2,m:1 t:23",
         "fields": "f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f14,f15,f16,f17,f18,f20,f21,f22,f23,f24,f25,f26,f37,f38,f39,f40,f41,f45,f46,f48,f49,f57,f61,f100,f112,f113,f114,f115,f221",
         "_": "1623833739532",
     }
     # 增加超时时间到 30 秒，重试次数 3 次
-    r = fetcher.make_request(url, params=params, retry=3, timeout=30)
-    data_json = r.json()
-    data = data_json["data"]["diff"]
-    if not data:
+    # 在 Docker 环境中禁用代理，避免网络连接问题
+    r = fetcher.make_request(url, params=params, retry=3, timeout=30, use_proxy=False)
+    # 检查响应内容
+    if not r.content or len(r.content) == 0:
+        logging.error("API 返回空内容")
         return pd.DataFrame()
+    try:
+        data_json = r.json()
+    except Exception as e:
+        logging.error(f"解析 JSON 失败: {e}, 响应内容前200字符: {r.text[:200]}")
+        return pd.DataFrame()
+    if not data_json.get('data') or not data_json["data"].get("diff"):
+        logging.error("API 返回的数据格式不正确")
+        return pd.DataFrame()
+    data = data_json["data"]["diff"]
 
     data_count = data_json["data"]["total"]
-    page_count = math.ceil(data_count/page_size)
-    logging.info(f"获取股票列表：总数 {data_count}，共 {page_count} 页，每页 {page_size} 只")
-    while page_count > 1:
+    total_pages = math.ceil(data_count/page_size)
+    # 如果设置了最大页数，只获取前几页
+    if max_pages is not None:
+        total_pages = min(total_pages, max_pages)
+        logging.info(f"获取股票列表：总数 {data_count}，限制获取前 {total_pages} 页，每页 {page_size} 只")
+    else:
+        total_pages = total_pages
+        logging.info(f"获取股票列表：总数 {data_count}，共 {total_pages} 页，每页 {page_size} 只")
+
+    # 如果第一页数据为空，直接返回
+    if len(data) == 0:
+        logging.warning("第一页数据为空，无法继续获取后续页面")
+        return pd.DataFrame()
+
+    while page_current < total_pages:
         # 添加随机延迟，避免爬取过快
-        time.sleep(random.uniform(1, 1.5))
+        time.sleep(random.uniform(2, 3))
         page_current = page_current + 1
         params["pn"] = page_current
-        r = fetcher.make_request(url, params=params, retry=3, timeout=30)
-        data_json = r.json()
+        r = fetcher.make_request(url, params=params, retry=3, timeout=30, use_proxy=False)
+        # 检查响应内容
+        if not r.content or len(r.content) == 0:
+            logging.error(f"第 {page_current} 页 API 返回空内容")
+            continue
+        try:
+            data_json = r.json()
+        except Exception as e:
+            logging.error(f"第 {page_current} 页解析 JSON 失败: {e}, 响应内容前200字符: {r.text[:200]}")
+            continue
+        if not data_json.get('data') or not data_json["data"].get("diff"):
+            logging.error(f"第 {page_current} 页 API 返回的数据格式不正确")
+            continue
         _data = data_json["data"]["diff"]
         data.extend(_data)
-        logging.info(f"已获取第 {page_current}/{page_count} 页股票数据")
-        page_count =page_count - 1
+        logging.info(f"已获取第 {page_current}/{total_pages} 页股票数据")
 
     temp_df = pd.DataFrame(data)
     temp_df.columns = [
@@ -192,7 +225,7 @@ def stock_zh_a_spot_em() -> pd.DataFrame:
     return temp_df
 
 
-@lru_cache()
+# @lru_cache()  # 禁用缓存，避免 Docker 环境中的网络问题
 def code_id_map_em() -> dict:
     """
     东方财富-股票和市场代码
@@ -216,7 +249,7 @@ def code_id_map_em() -> dict:
         "fields": "f12",
         "_": "1623833739532",
     }
-    r =  fetcher.make_request(url, params=params)
+    r =  fetcher.make_request(url, params=params, use_proxy=False)
     data_json = r.json()
     data = data_json["data"]["diff"]
     if not data:
@@ -229,7 +262,7 @@ def code_id_map_em() -> dict:
         time.sleep(random.uniform(1, 1.5))
         page_current = page_current + 1
         params["pn"] = page_current
-        r =  fetcher.make_request(url, params=params)
+        r =  fetcher.make_request(url, params=params, use_proxy=False)
         data_json = r.json()
         _data = data_json["data"]["diff"]
         data.extend(_data)
@@ -253,7 +286,7 @@ def code_id_map_em() -> dict:
         "fields": "f12",
         "_": "1623833739532",
     }
-    r =  fetcher.make_request(url, params=params)
+    r =  fetcher.make_request(url, params=params, use_proxy=False)
     data_json = r.json()
     data = data_json["data"]["diff"]
     if not data:
@@ -266,7 +299,7 @@ def code_id_map_em() -> dict:
         time.sleep(random.uniform(1, 1.5))
         page_current = page_current + 1
         params["pn"] = page_current
-        r =  fetcher.make_request(url, params=params)
+        r =  fetcher.make_request(url, params=params, use_proxy=False)
         data_json = r.json()
         _data = data_json["data"]["diff"]
         data.extend(_data)
@@ -289,7 +322,7 @@ def code_id_map_em() -> dict:
         "fields": "f12",
         "_": "1623833739532",
     }
-    r =  fetcher.make_request(url, params=params)
+    r =  fetcher.make_request(url, params=params, use_proxy=False)
     data_json = r.json()
     data = data_json["data"]["diff"]
     if not data:
@@ -302,7 +335,7 @@ def code_id_map_em() -> dict:
         time.sleep(random.uniform(1, 1.5))
         page_current = page_current + 1
         params["pn"] = page_current
-        r =  fetcher.make_request(url, params=params)
+        r =  fetcher.make_request(url, params=params, use_proxy=False)
         data_json = r.json()
         _data = data_json["data"]["diff"]
         data.extend(_data)
@@ -337,7 +370,15 @@ def stock_zh_a_hist(
     :return: 每日行情
     :rtype: pandas.DataFrame
     """
-    code_id_dict = code_id_map_em()
+    # 根据股票代码前缀确定市场ID，避免调用 code_id_map_em() 导致性能问题
+    code_id_dict = code_id_map_em() if symbol.startswith(('9', '8')) else {}
+    # 如果不在字典中，根据前缀判断
+    if symbol not in code_id_dict:
+        if symbol.startswith(('6')):
+            code_id_dict[symbol] = 1  # 上海证券交易所
+        elif symbol.startswith(('0', '3')):
+            code_id_dict[symbol] = 0  # 深圳证券交易所
+
     adjust_dict = {"qfq": "1", "hfq": "2", "": "0"}
     period_dict = {"daily": "101", "weekly": "102", "monthly": "103"}
     url = "http://push2his.eastmoney.com/api/qt/stock/kline/get"
@@ -352,7 +393,7 @@ def stock_zh_a_hist(
         "end": end_date,
         "_": "1623766962675",
     }
-    r = fetcher.make_request(url, params=params, retry=3, timeout=30)
+    r = fetcher.make_request(url, params=params, retry=3, timeout=30, use_proxy=False)
     data_json = r.json()
     if not (data_json["data"] and data_json["data"]["klines"]):
         return pd.DataFrame()
@@ -412,7 +453,14 @@ def stock_zh_a_hist_min_em(
     :return: 每日分时行情
     :rtype: pandas.DataFrame
     """
-    code_id_dict = code_id_map_em()
+    # 根据股票代码前缀确定市场ID，避免调用 code_id_map_em() 导致性能问题
+    code_id_dict = code_id_map_em() if symbol.startswith(('9', '8')) else {}
+    # 如果不在字典中，根据前缀判断
+    if symbol not in code_id_dict:
+        if symbol.startswith(('6')):
+            code_id_dict[symbol] = 1  # 上海证券交易所
+        elif symbol.startswith(('0', '3')):
+            code_id_dict[symbol] = 0  # 深圳证券交易所
     adjust_map = {
         "": "0",
         "qfq": "1",
@@ -429,7 +477,7 @@ def stock_zh_a_hist_min_em(
             "secid": f"{code_id_dict[symbol]}.{symbol}",
             "_": "1623766962675",
         }
-        r =  fetcher.make_request(url, params=params)
+        r =  fetcher.make_request(url, params=params, use_proxy=False)
         data_json = r.json()
         temp_df = pd.DataFrame(
             [item.split(",") for item in data_json["data"]["trends"]]
@@ -469,7 +517,7 @@ def stock_zh_a_hist_min_em(
             "end": "20500000",
             "_": "1630930917857",
         }
-        r =  fetcher.make_request(url, params=params)
+        r =  fetcher.make_request(url, params=params, use_proxy=False)
         data_json = r.json()
         temp_df = pd.DataFrame(
             [item.split(",") for item in data_json["data"]["klines"]]
@@ -536,7 +584,14 @@ def stock_zh_a_hist_pre_min_em(
     :return: 每日分时行情包含盘前数据
     :rtype: pandas.DataFrame
     """
-    code_id_dict = code_id_map_em()
+    # 根据股票代码前缀确定市场ID，避免调用 code_id_map_em() 导致性能问题
+    code_id_dict = code_id_map_em() if symbol.startswith(('9', '8')) else {}
+    # 如果不在字典中，根据前缀判断
+    if symbol not in code_id_dict:
+        if symbol.startswith(('6')):
+            code_id_dict[symbol] = 1  # 上海证券交易所
+        elif symbol.startswith(('0', '3')):
+            code_id_dict[symbol] = 0  # 深圳证券交易所
     url = "https://push2.eastmoney.com/api/qt/stock/trends2/get"
     params = {
         "fields1": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
@@ -548,7 +603,7 @@ def stock_zh_a_hist_pre_min_em(
         "secid": f"{code_id_dict[symbol]}.{symbol}",
         "_": "1623766962675",
     }
-    r =  fetcher.make_request(url, params=params)
+    r =  fetcher.make_request(url, params=params, use_proxy=False)
     data_json = r.json()
     temp_df = pd.DataFrame(
         [item.split(",") for item in data_json["data"]["trends"]]
